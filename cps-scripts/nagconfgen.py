@@ -1,4 +1,3 @@
-
 # Created by: I. Jared 11/28/2022
 # This script is designed to reduce the tedium from generating 
 # Nagios host configs. Since Nagios Core does not come with a config wizard
@@ -83,12 +82,12 @@ def main():
                     continue
             
             # Adding this so we have timestamps on all generated configs. Helps keep track of anomalies / issues. NOTE: Older configs may be using
-			      # UTC time instead of CST. You will need to ensure that the Linux system this is on will be using the 'America/Chicago'  timezone.
-			      # America/Chicago was set on CPS-Nagios in late October-early November 2022.
+			# UTC time instead of CST. You will need to ensure that the Linux system this is on will be using the 'America/Chicago'  timezone.
+			# America/Chicago was set on CPS-Nagios in late October-early November 2022.
             today = datetime.now()
                 
             # Do not touch unless Nagios changes how formatting works for configs, or if you're adding another service for Nagios to check.
-			      # For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
+			# For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
             confFileString = (
                 f"# CONFIG GENERATED ON : {today.strftime('%m-%d-%Y %I:%M %p')}\n# BY NAGIOS CONFIG GENERATOR\n\n"
                 "define host {\n"
@@ -119,7 +118,7 @@ def main():
                     #with open(f"{HOSTNAME}.cfg", "w") as cfgFile:
                     #        cfgFile.write(confFileString)
                     #        print(f"\n{SWITCH_DIR} config file has been successfully written.\n") # USED FOR TESTING PURPOSES, ESPECIALLY ON WINDOWS WORKSTATIONS. Do not uncomment this unless
-					          #																				 you comment out the other "with open" file operation.
+					#																				 you comment out the other "with open" file operation.
                 else:
                     pass
                 
@@ -152,7 +151,7 @@ def main():
             today = datetime.now()
                     
             # Do not touch unless Nagios changes how formatting works for configs, or if you're adding another service for Nagios to check.
-			      # For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
+			# For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
             confFileString = (
                 f"# CONFIG GENERATED ON : {today.strftime('%m-%d-%Y %I:%M %p')}\n# BY NAGIOS CONFIG GENERATOR\n\n"
                 "define host {\n"
@@ -209,7 +208,7 @@ def main():
             today = datetime.now()
             
             # Do not touch unless Nagios changes how formatting works for configs, or if you're adding another service for Nagios to check.
-			      # For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
+			# For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
             confFileString = (
             f"# CONFIG GENERATED ON : {today.strftime('%m-%d-%Y %I:%M %p')}\n# BY NAGIOS CONFIG GENERATOR\n\n"
             "define host {\n"
@@ -266,7 +265,7 @@ def main():
             today = datetime.now()
             
             # Do not touch unless Nagios changes how formatting works for configs, or if you're adding another service for Nagios to check.
-			      # For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
+			# For other service checks, these must be defined in the host's respective original template (found in the /objects folder).
             confFileString = (
             f"# CONFIG GENERATED ON : {today.strftime('%m-%d-%Y %I:%M %p')}\n# BY NAGIOS CONFIG GENERATOR\n\n"
             "define host {\n"
@@ -317,8 +316,10 @@ def main():
                 os.system('cls') # only needed for testing the script on Windows workstations.
             print("Exiting with exit code: 0")
             exit(0)            
+        
+        # If someone manages to make it to this line I'll be impressed.
         else:
-            print("\nError has occurred, exiting with exit code: 1")
+            print("shouldn't have gotten here, that means there's an error :)")
 			exit(1)
 main()
 
