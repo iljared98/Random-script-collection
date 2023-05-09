@@ -1,4 +1,24 @@
-owetaps,DC=com"
+# Created by   : I. Jared
+# Date Created : 4/26/2023
+# Purpose      : Automating staff account creation and updating fields if they exist.
+
+# Change this first variable should the export file need to move for whatever reason.
+$MAS_EXPORT_FILE = "MAS_EXPORT.csv"
+# TODO: Robust logging for account creation.
+# Right now nothing is even being written to this file, maybe add the print statements later along with
+# timestamps???
+$LOGGING_FILE = "[PATH]\STAFF_CREATION.log" 
+
+# These function similarly to Jooel's AddUser.ini OU mappings
+# per site. The intention with District mapping to NULL is to ensure
+# District employees are being mapped to OUs by their job titles
+# by Michael's request.
+
+$locationToOU = @{
+    "Band" = "OU=Users,OU=Band,OU=STAFF,DC=cowetaps,DC=com"
+    "CE" = "OU=Users,OU=CE,OU=STAFF,DC=cowetaps,DC=com"
+    "SS" = "OU=Users,OU=SS,OU=STAFF,DC=cowetaps,DC=com"
+    "NW" = "OU=Users,OU=NW,OU=STAFF,DC=cowetaps,DC=com"
     "MIGC" = "OU=Users,OU=MIGC,OU=STAFF,DC=cowetaps,DC=com"
     "HIGC" = "OU=Users,OU=HIGC,OU=STAFF,DC=cowetaps,DC=com"
     "JH" = "OU=Users,OU=JH,OU=STAFF,DC=cowetaps,DC=com"
@@ -16,7 +36,7 @@ owetaps,DC=com"
 $usersToCreate = Import-CSV $MAS_EXPORT_FILE
 
 # This is an array of users to exclude from the update logic branch. Mostly includes VIPs such
-# as superintendents that may have multiple roles (i.e. district super / bus driver).
+# as superintendents that may have multiple roles (i.e. Max Myers as district super / bus driver).
 # Please document who these employeeIDs belong to, as the employeeID is the main comparison field
 # for account duplication / field updates. 
 # 80314 -> Max Myers (district super)
