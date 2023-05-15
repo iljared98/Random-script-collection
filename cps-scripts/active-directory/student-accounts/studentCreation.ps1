@@ -1,42 +1,40 @@
 # Created by   : I. Jared
 # Date Created : 5/8/2023
 # Purpose      : Automating the creation of student accounts and grade promotions in AD.
+Import-Module $PSScriptRoot\UDFs\iljFunctions.ps1 -Force
 
 #! Do not change this file unless absolutely necessary.
-$PS_EXPORT_FILE = "export.csv"
+$PS_EXPORT_FILE = "AZAD_Students_test.csv"
+
 
 # TODO: Robust logging of the student creation script.
-# TODO: FIRST.LAST CONVENTION FOR NAMES
-# TODO: FIRST LAST LUNCH NUMBER FOR PASS (DONE!)
-# TODO: WRITEBACK INTO POWERSCHOOL FOR EMAIL ADDRESSES (i.e. make JOHN.DOE99@cowetaps.org. New process exports to a CSV, then writes back into PS Database)
 # Alternatively, execute these commands as administrator with a scheduled task : 
 # powershell ".\studentCreation.ps1" > studentCreation.log
 $SC_LOGGING_FILE = "studentCreation.log"
+$DISABLED_OU = "OU=Disabled_Students,OU=STUDENTS,DC=cowetaps,DC=com"
 
-### Data / rules used to correctly assign OUs as well as to update accounts correctly. ###
-# School codes as they are defined in Powershool. I included all of them
-# even though the "School for Blind" only seems to have 2-3 users across both sites??
-# Need to confirm with Amy or Damon. Mapping these as a dict for now.
+# Dictionary of school codes.
+#! THESE STUDENTS ARE EXCLUDED FROM THE EXPORT :
+#! PK-8 and 9-12 School for Blind (615 / 720), Grad students (999999)
+# CA = HS Academy students 
 $schoolCodes = @{
-    "705" = "HS"
-    "710" = "IHS"
-    "715" = "CAHS" # Academy students
+    "705" = "OU=HS,OU=STUDENTS,DC=cowetaps,DC=com"
+    "710" = "OU=IH,OU=STUDENTS,DC=cowetaps,DC=com"
+    "715" = "OU=CA,OU=STUDENTS,DC=cowetaps,DC=com" 
     "610" = "OU=JH,OU=STUDENTS,DC=cowetaps,DC=com"
-    "210" = "HIGC"
-    "205" = "MIGC"
-    "105" = "CE"
-    "110" = "NW"
-    "115" = "SS"
-    "720" = "912SB" # 9-12 School for Blind
-    "615" = "PK8SB" # PK-8 School for Blind
-    "999999" = "Graduated Students" # TODO: Auto disable these accounts somehow.
+    "210" = "OU=HI,OU=STUDENTS,DC=cowetaps,DC=com"
+    "205" = "OU=MI,OU=STUDENTS,DC=cowetaps,DC=com"
+    "105" = "OU=CE,OU=STUDENTS,DC=cowetaps,DC=com"
+    "110" = "OU=NW,OU=STUDENTS,DC=cowetaps,DC=com"
+    "115" = "OU=SS,OU=STUDENTS,DC=cowetaps,DC=com"
+    "999999" = "Graduated Students" 
 }
 
 # Dictionary of grade strings.
-# -1 for Pre-K, 0 for K, rest should be obvious.
-# OU=Users,OU=7TH,
+# 0 for K, rest should be obvious.
+#! THESE STUDENTS ARE EXCLUDED FROM THE EXPORT :
+#! -2 (Headstart), -1 (Pre-K).
 $schoolGrades = @{
-    "-1" = "OU=Users,OU=PK,"
     "0" = "OU=Users,OU=K,"
     "1" = "OU=Users,OU=1ST,"
     "2" = "OU=Users,OU=2ND,"
@@ -51,46 +49,74 @@ $schoolGrades = @{
     "11" = "OU=Users,OU=11TH,"
     "12" = "OU=Users,OU=12TH,"
 }
-### This section is meant to include excluded users and OUs 
-# Array of UPNs to exclude from the update / promotion process.
+
+# These arrays should include any UPNs, distinguished OU names, or SAM names to exclude from processing.
 $excludedUPNs = @("CE_STUDENT@cowetaps.com", "SS_STUDENT@cowetaps.com", "NW_Student@cowetaps.com")
+$excludedDistinguishedNames = @("1", "2")
+$excludedSAMs = @("1", "2")
 
+$usersToCreate = Import-CSV $PS_EXPORT_FILE
 
+Write-Host "            ################################################`
+            #    COWETA PUBLIC SCHOOLS STUDENT ACCOUNT     #`
+            #                  GENERATOR                   #`
+            #                                              #`
+            ################################################"
+
+# For logging / debugging purposes.
+Write-Host "DATE: MM/DD/YYYY HH:mm"
+Write-Host ""
 foreach ($user in $usersToCreate) {
 
-    # Grabs site name value 
-    $siteName = $schoolCodes[$user.siteCode] # TODO: Verify this actually works. Also, correct fields
     # Aligning values from CSV columns to variables..
-    $studentID = $user.STUDENTS_StudentID
-    $FirstName = $user.STUDENTS_FirstName
-    $LastName = $user.STUDENTS_LastName
-    #$Username = $user.STUDENTS_StudentID 
-    $siteName = $schoolCodes[$user.siteCode] # TODO: Verify this actually works. Also, correct fields
-    $studentGrade = $schoolGrades[$user.studentGrade]
+    $studentID = $user.studentNumber
 
-    # First init, last init, lunch # convention
-    $Password = $FirstName.Substring(0, 1) + $LastName.Substring(0, 1) + $studentID
+    # Placeholders to remove annoying special characters. They are removed with no whitespace.
+    $firstHolder = $user.firstName
+    $lastHolder = $user.lastName
 
-    # TODO: Force our user naming convention scheme into any new emails, then write them back into PS to avoid registrar errors.
-    $Company = $user.company
+    # TODO: Strip extra first / last names (i.e. example-Name to exampleName to example) for simplicity's sake.
+    $FirstName = $($firstHolder -replace "'","" -replace "-","")
+    $LastName = $($lastHolder -replace "'","" -replace "-","")
 
-    #! Putting into a try-catch block, as the script will likely get caught on an exception
-    #! when comparing student IDs that do not exist.
+    $studentGrade = $schoolGrades[$user.gradeLevel]
+    $siteName = $schoolCodes[$user.schoolID] 
+    
+
+    $Username = "$FirstName.$LastName"
+
+    # TODO: Find the correct place to drop this logic at; right now it is in a weird spot, probably save for student creation or update field.
+    # I went with this method to deal with duplicate names because 2 random digits would be too inconsistent and unreliable to deal with.
+    # This should (in a perfect world) handle up to 10 kids with a duplicate name, as 0-9 will be the last digit of the lunch number.
+    # if ((Get-ADUser -F "SamAccountName -eq '$username'" -Properties * | Select-Object -ExpandProperty SamAccountName)) {
+    #    Write-Host "Username combo $Username already exists, appending initials and last lunch digit for UPN/SAM: `n"
+    #    $Username = $Username + $FirstName.Substring(0, 1) + $LastName.Substring(0, 1) + $studentID.Substring($studentID.get_Length() - 1)
+    #    Write-Host "New Username: $Username`n"
+    #}
+
+    # New student password convention. I had to add the exclamation point since AD
+    # complained about not having a special character for the passwords.
+    #! Exclamation + first initial + last initial +  lunch # 
+    $Password = "!" + $FirstName.Substring(0, 1) + $LastName.Substring(0, 1) + $studentID
+    $Company = "Coweta Public Schools"
+
     # Checks for duplicate users, using the employeeID field. If they already exist, update fields.
-    try {
-        if (Get-ADUser -F {EmployeeID -eq $EmployeeID}) {
+        if ((Get-ADUser -F "employeeID -eq '$studentID'" -Properties * | Select-Object -ExpandProperty EmployeeID)) { #
 
-            # Checks if student is in graduated school code, if they are, disables account
+            # Checks if student is in graduated school code, if they are, look to disable the account.
             if ($siteName -eq "Graduated Students") {
 
                 # If disabled = true, skip account entirely.
-               if ((Get-ADUser -F $EmployeeID -Properties * | Select-Object -ExpandProperty Enabled) -eq "False") {
-                    Write-Host "Student account $EmployeeID is already disabled. No longer processing the account..."
+               if ((Get-ADUser -F "employeeID -like $studentID" -Properties * | Select-Object -ExpandProperty Enabled) -eq $false) {
+                    Write-Host "Student account $studentID is already disabled. No longer processing the account..."
                }
 
                # Disable account, then skip after making a note.
                else {
-                Set-ADUser args or something 
+                Write-Host "Student account $studentID is graduated but not disabled, disabling account and`n moving the`
+                object to the DISABLED_STUDENTS container..."
+                Get-ADUser -F "employeeID -like $studentID" | Disable-ADAccount
+                Get-ADUser -F "employeeID -like $studentID" | Move-ADObject -TargetPath $DISABLED_OU
                }
     
             }
@@ -99,54 +125,67 @@ foreach ($user in $usersToCreate) {
             # just in case that would cause errors on our cloud tenant side of things.
             else {
 
+                Write-Host "Student account $Username ($studentID) already exists, updating fields in case of site / name changes..."
                 # Substring(3, 2) extracts the 2 character site code for each OU.
                 # i.e. Substring(3, 2) turns "OU=JH,OU=STUDENTS,DC=cowetaps,DC=com" into JH.
                 #! Please ensure that all site containers still follow this 2 character convention
                 #! to avoid errors or requiring a bunch of unnecessary refactoring.
+                $userOUtoAssign = "$studentGrade$siteName"
+
+                # TODO: I forgot why this is acting weird, make sure it doesn't bug out and fix it.
                 Set-ADUser `
-                -Name $("$FirstName $LastName") `
+                -Identity $($Username) `
                 -GivenName $FirstName `
-                -Path $userOUtoAssign `
                 -Surname $LastName `
                 -UserPrincipalName $("$Username@cowetaps.com") `
-                -EmployeeID $EmployeeID `
+                -SamAccountName $($Username) `
+                -EmployeeID $studentID `
                 -DisplayName $("$FirstName $LastName") `
                 -Department $siteName.Substring(3, 2) `
-                -EmailAddress $("") 
+                -EmailAddress $("$Username@cowetaps.org") | Move-ADObject -TargetPath $userOUtoAssign
+
+                Write-Host "UPDATING ACCOUNT : $Username. `n`
+                First Name: $FirstName`n`
+                Last Name: $LastName`n`
+                Email: $("$Username@cowetaps.org")`n`
+                School Code: $($siteName.Substring(3, 2))`n`
+                Company: Coweta Public Schools`n`
+                Student ID: $studentID`n"
+                Write-Host "$userOUtoAssign is the OU for this account.`n`n"
             }
         }
-    }
 
-    catch {
-        Write-Host "Specified student ID $EmployeeID does not exist, creating new account based on`nfields in Powerschool export..."
-         # TODO: Add logic branch here to fix duplicate names.
-         $userOUtoAssign = "$studentGrade$siteName"
-         # Currently Description maps to the variable $EmployeeType (certified/support). Change if we add a custom extended field later.
-         if (1 -eq 1) {
-            Write-Host "Username combo $Username already exists, appending random 2 digits for UPN/SAM: "
-            $Username = "$Username$(Get-Random -Maximum 99)"
-         }
-         
-         # For the time being, Description is being hijacked by : EMPLOYEE TYPE, or for students, [information that would be useful].
-         New-ADUser `
-             -Name $("$FirstName $LastName") `
-             -GivenName $FirstName `
-             -Path $userOUtoAssign `
-             -Surname $LastName `
-             -UserPrincipalName $("$Username@cowetaps.com") `
-             -EmployeeID $EmployeeID `
-             -DisplayName $("$FirstName $LastName") `
-             -Department $siteName.Substring(3, 2) `
-             -EmailAddress $EmailAddress `
-             -Company $Company `
-             -AccountPassword $(ConvertTo-SecureString $Password -AsPlainText -Force) `
-             -ChangePasswordAtLogon $True `
-             -Enabled $True
- 
-         Write-Host "CREATING ACCOUNT : $Username. `nFirstName: $FirstName`nLastName: $LastName`nPass: $Password`nEmail: $EmailAddress`nEmployeeType: $EmployeeType`nJobTitle: $JobTitle`nPrimaryLocation: $PrimaryLocation`nCompany: $Company`nEmpID: $EmployeeID`n"
-         Write-Host "$userOUtoAssign is the OU for this account.`n`n"
-    }
+    else {
+        Write-Host "Specified student $Username ($studentID) does not exist, creating new account based on`nfields in Powerschool export..."
 
-    # Get-ADUser -Filter "EmployeeID -eq 81902" -Properties * | Select-Object -ExpandProperty EmployeeID
-    # Main magic that happens.
-} # End of foreach
+        $userOUtoAssign = "$studentGrade$siteName"
+        
+        New-ADUser `
+            -Name $("$FirstName $LastName") `
+            -GivenName $FirstName `
+            -Path $userOUtoAssign `
+            -Surname $LastName `
+            -UserPrincipalName $("$Username@cowetaps.com") `
+            -SamAccountName $Username `
+            -EmployeeID $studentID `
+            -DisplayName $("$FirstName $LastName") `
+            -Department $siteName.Substring(3, 2) `
+            -EmailAddress $("$Username@cowetaps.org") `
+            -Company "Coweta Public Schools" `
+            -AccountPassword $(ConvertTo-SecureString $Password -AsPlainText -Force) `
+            -ChangePasswordAtLogon $False `
+            -PasswordNeverExpires $True `
+            -Enabled $True
+
+        Write-Host "CREATING ACCOUNT : $Username. `n`
+        First Name: $FirstName`n`
+        Last Name: $LastName`n`
+        Password: $Password`n`
+        Email: $("$Username@cowetaps.org")`n`
+        School Code: $($siteName.Substring(3, 2))`n`
+        Company: $Company`n`
+        Student ID: $studentID`n"
+        Write-Host "$userOUtoAssign is the OU for this account.`n`n"
+   }    
+
+} 
