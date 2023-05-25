@@ -164,6 +164,8 @@ foreach ($user in $usersToCreate) {
 
             $userOUtoAssign = "$studentGrade$siteName"
 
+
+
             # I went with this method to deal with duplicate names because 2 random digits would be too inconsistent and unreliable to deal with.
             # This should (in a perfect world) handle up to 10 kids with a duplicate name, as 0-9 will be the last digit of the lunch number.
             if ((Get-ADUser -F "SamAccountName -eq '$Username'" -Properties * | Select-Object -ExpandProperty SamAccountName)) {
@@ -193,7 +195,6 @@ foreach ($user in $usersToCreate) {
             Write-Host "CREATING ACCOUNT : $Username. `n`
             First Name: $FirstName`n`
             Last Name: $LastName`n`
-            Password: $Password`n`
             Email: $("$Username@cowetaps.org")`n`
             School Code: $($siteName.Substring(3, 2))`n`
             Company: $Company`n`
